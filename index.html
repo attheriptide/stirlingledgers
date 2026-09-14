@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Daily Ledger</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --paper:#fdfcf8;
@@ -193,24 +194,66 @@ function toast(msg){
   setTimeout(()=>t.classList.remove('show'), 2200);
 }
 
-// ---------- storage helpers ----------
+// ---------- Supabase connection ----------
+const SUPABASE_URL = 'https://wkkczrxifcdhmtpglfns.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_oDJvkSZZb4CMpzoz7_y2Xg_sAVTx4xa';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ---------- storage helpers (Supabase-backed) ----------
+// Two tables back this app:
+//   kv_days      (date date primary key, data jsonb not null)
+//   kv_inventory (model text primary key, qty integer not null default 0)
+// Every other function in this file still just calls getJSON/setJSON/listKeys,
+// so nothing below this block needed to change.
 async function getJSON(key){
   try{
-    const r = await window.storage.get(key, false);
-    return r ? JSON.parse(r.value) : null;
-  }catch(e){ return null; }
+    if(key === 'inventory'){
+      const { data, error } = await supabase.from('kv_inventory').select('model, qty');
+      if(error) throw error;
+      if(!data || data.length === 0) return null;
+      const obj = {};
+      data.forEach(row => { obj[row.model] = row.qty; });
+      return obj;
+    }
+    if(key.startsWith('day:')){
+      const date = key.slice(4);
+      const { data, error } = await supabase.from('kv_days').select('data').eq('date', date).maybeSingle();
+      if(error) throw error;
+      return data ? data.data : null;
+    }
+    return null;
+  }catch(e){ console.error('getJSON failed', e); return null; }
 }
 async function setJSON(key, value){
   try{
-    const r = await window.storage.set(key, JSON.stringify(value), false);
-    return !!r;
-  }catch(e){ console.error('storage set failed', e); return false; }
+    if(key === 'inventory'){
+      const rows = Object.entries(value).map(([model, qty]) => ({ model, qty }));
+      const { error: delErr } = await supabase.from('kv_inventory').delete().neq('model', '__none__');
+      if(delErr) throw delErr;
+      if(rows.length){
+        const { error: insErr } = await supabase.from('kv_inventory').insert(rows);
+        if(insErr) throw insErr;
+      }
+      return true;
+    }
+    if(key.startsWith('day:')){
+      const date = key.slice(4);
+      const { error } = await supabase.from('kv_days').upsert({ date, data: value });
+      if(error) throw error;
+      return true;
+    }
+    return false;
+  }catch(e){ console.error('setJSON failed', e); return false; }
 }
 async function listKeys(prefix){
   try{
-    const r = await window.storage.list(prefix, false);
-    return r ? r.keys : [];
-  }catch(e){ return []; }
+    if(prefix === 'day:'){
+      const { data, error } = await supabase.from('kv_days').select('date');
+      if(error) throw error;
+      return (data||[]).map(row => 'day:' + row.date);
+    }
+    return [];
+  }catch(e){ console.error('listKeys failed', e); return []; }
 }
 
 // ---------- tabs ----------
@@ -524,5 +567,6 @@ async function runReport(){
   await loadDay(currentDate);
 })();
 </script>
+<script type="module" src="/src/main.js"></script>
 </body>
 </html>
