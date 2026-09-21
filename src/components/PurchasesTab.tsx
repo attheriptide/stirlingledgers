@@ -7,7 +7,7 @@ import type { Purchase } from '../lib/types';
 import { SectionTitle, AddButton, DelButton, Field, inputCls, EmptyRow, Th, Td, Note } from './ui';
 
 export default function PurchasesTab() {
-  const { inventory, applyStockDeltas, addModel } = useInventory();
+  const { inventory, recordPurchase, applyStockDeltas } = useInventory();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -16,7 +16,9 @@ export default function PurchasesTab() {
   const [vendor, setVendor] = useState('');
   const [model, setModel] = useState('');
   const [qty, setQty] = useState('1');
-  const [cost, setCost] = useState('');
+  const [buyingPrice, setBuyingPrice] = useState('');
+  const [sellingPrice, setSellingPrice] = useState('');
+  const [transport, setTransport] = useState('0');
   const [paid, setPaid] = useState('');
 
   const refresh = async () => {
@@ -26,27 +28,38 @@ export default function PurchasesTab() {
   };
   useEffect(() => { refresh(); }, []);
 
+  // prefill selling price from what's already on file for this model, if any
+  useEffect(() => {
+    const item = inventory[model.trim()];
+    if (item && item.sellingPrice > 0 && sellingPrice === '') setSellingPrice(String(item.sellingPrice));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model]);
+
   const resetForm = () => {
-    setVendor(''); setModel(''); setQty('1'); setCost(''); setPaid('');
+    setVendor(''); setModel(''); setQty('1'); setBuyingPrice(''); setSellingPrice(''); setTransport('0'); setPaid('');
   };
 
+  const qtyNum = Number(qty) || 1;
+  const buyingNum = Number(buyingPrice) || 0;
+  const transportNum = Number(transport) || 0;
+  const totalCost = qtyNum * buyingNum + transportNum;
+  const landedPerUnit = qtyNum > 0 ? (qtyNum * buyingNum + transportNum) / qtyNum : buyingNum;
+  const sellingNum = Number(sellingPrice) || 0;
+  const marginPerUnit = sellingNum > 0 ? sellingNum - landedPerUnit : 0;
+
   const save = async () => {
-    const costNum = Number(cost) || 0;
-    const qtyNum = Number(qty) || 1;
     if (!model.trim()) { toast('Enter a model'); return; }
-    if (costNum <= 0) { toast('Enter the cost'); return; }
-    const paidNum = paid === '' ? costNum : Number(paid) || 0;
+    if (buyingNum <= 0) { toast('Enter the buying price'); return; }
+    const paidNum = paid === '' ? totalCost : Number(paid) || 0;
     const p: Purchase = {
-      id: uid(), date, vendor: vendor || '—', model: model.trim(), qty: qtyNum, cost: costNum, paid: paidNum, notes: '',
+      id: uid(), date, vendor: vendor || '—', model: model.trim(), qty: qtyNum,
+      buyingPrice: buyingNum, sellingPrice: sellingNum, transport: transportNum,
+      cost: totalCost, paid: paidNum, notes: '',
     };
     const ok = await addPurchase(p);
     if (!ok) { toast('Could not save purchase'); return; }
-    if (!(model.trim() in inventory)) {
-      await addModel(model.trim(), qtyNum);
-    } else {
-      await applyStockDeltas({ [model.trim()]: qtyNum });
-    }
-    toast('Purchase saved — stock updated');
+    await recordPurchase(p.model, qtyNum, landedPerUnit, sellingNum);
+    toast('Purchase saved — stock and pricing updated');
     resetForm();
     setShowForm(false);
     refresh();
@@ -71,21 +84,19 @@ export default function PurchasesTab() {
   };
 
   const modelOptions = Object.keys(inventory).sort();
-  const totalCost = purchases.reduce((s, p) => s + p.cost, 0);
+  const totalSpent = purchases.reduce((s, p) => s + p.cost, 0);
   const totalOwing = purchases.reduce((s, p) => s + Math.max(0, p.cost - p.paid), 0);
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-3">
-        <SectionTitle>Purchases (stock bought in)</SectionTitle>
-      </div>
+      <SectionTitle>Purchases (stock bought in)</SectionTitle>
 
       {!showForm ? (
         <AddButton onClick={() => setShowForm(true)}>+ Add purchase</AddButton>
       ) : (
-        <div className="bg-[#f4efe2] border border-[#e0d9c6] rounded-md p-4 mb-4">
+        <div className="bg-highlight border border-highlight-border rounded-md p-4 mb-4">
           <div className="flex gap-3 flex-wrap mb-3">
-            <Field label="Date" className="max-w-[160px]">
+            <Field label="Date" className="max-w-[150px]">
               <input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} />
             </Field>
             <Field label="Vendor">
@@ -97,27 +108,49 @@ export default function PurchasesTab() {
                 {modelOptions.map((m) => <option key={m} value={m} />)}
               </datalist>
             </Field>
-            <Field label="Qty" className="max-w-[90px]">
+            <Field label="Qty" className="max-w-[80px]">
               <input type="number" min="1" className={inputCls} value={qty} onChange={(e) => setQty(e.target.value)} />
             </Field>
-            <Field label="Total cost" className="max-w-[140px]">
-              <input type="number" className={inputCls} placeholder="0" value={cost} onChange={(e) => setCost(e.target.value)} />
+          </div>
+          <div className="flex gap-3 flex-wrap mb-3">
+            <Field label="Buying price / unit" className="max-w-[160px]">
+              <input type="number" className={inputCls} placeholder="0" value={buyingPrice} onChange={(e) => setBuyingPrice(e.target.value)} />
             </Field>
-            <Field label="Paid now" className="max-w-[140px]">
-              <input type="number" className={inputCls} placeholder={cost || '0'} value={paid} onChange={(e) => setPaid(e.target.value)} />
+            <Field label="Transport (total)" className="max-w-[150px]">
+              <input type="number" className={inputCls} value={transport} onChange={(e) => setTransport(e.target.value)} />
+            </Field>
+            <Field label="Selling price / unit" className="max-w-[160px]">
+              <input type="number" className={inputCls} placeholder="0" value={sellingPrice} onChange={(e) => setSellingPrice(e.target.value)} />
+            </Field>
+            <Field label="Paid to vendor now" className="max-w-[160px]">
+              <input type="number" className={inputCls} placeholder={String(totalCost || 0)} value={paid} onChange={(e) => setPaid(e.target.value)} />
             </Field>
           </div>
+
+          <div className="text-[0.82rem] text-muted mb-3 flex gap-5 flex-wrap">
+            <span>Landed cost/unit: <strong className="text-ink">{money(landedPerUnit)}</strong></span>
+            <span>Total cost: <strong className="text-ink">{money(totalCost)}</strong></span>
+            {sellingNum > 0 && (
+              <span>Margin/unit: <strong className={marginPerUnit >= 0 ? 'text-green' : 'text-red'}>{money(marginPerUnit)}</strong></span>
+            )}
+          </div>
+
           <div className="flex gap-2">
-            <button onClick={save} className="bg-ink text-white px-4 py-1.5 rounded text-[0.85rem] font-bold">Save purchase</button>
+            <button onClick={save} className="bg-accent text-white px-4 py-1.5 rounded-md text-[0.85rem] font-semibold">Save purchase</button>
             <button onClick={() => { setShowForm(false); resetForm(); }} className="text-muted text-[0.82rem] underline">Cancel</button>
           </div>
         </div>
       )}
 
       <table className="w-full border-collapse mb-2.5 text-[0.88rem]">
-        <thead><tr><Th>Date</Th><Th>Vendor</Th><Th>Model</Th><Th>Qty</Th><Th>Cost</Th><Th>Paid</Th><Th>Owing</Th><Th></Th></tr></thead>
+        <thead>
+          <tr>
+            <Th>Date</Th><Th>Vendor</Th><Th>Model</Th><Th>Qty</Th><Th>Buy/unit</Th><Th>Transport</Th>
+            <Th>Sell/unit</Th><Th>Total cost</Th><Th>Paid</Th><Th>Owing</Th><Th></Th>
+          </tr>
+        </thead>
         <tbody>
-          {!loading && purchases.length === 0 && <EmptyRow colSpan={8}>No purchases recorded yet.</EmptyRow>}
+          {!loading && purchases.length === 0 && <EmptyRow colSpan={11}>No purchases recorded yet.</EmptyRow>}
           {purchases.map((p) => {
             const owing = p.cost - p.paid;
             return (
@@ -126,12 +159,13 @@ export default function PurchasesTab() {
                 <Td>{p.vendor}</Td>
                 <Td>{p.model}</Td>
                 <Td>{p.qty}</Td>
+                <Td>{money(p.buyingPrice)}</Td>
+                <Td>{money(p.transport)}</Td>
+                <Td>{p.sellingPrice > 0 ? money(p.sellingPrice) : '—'}</Td>
                 <Td>{money(p.cost)}</Td>
                 <Td>{money(p.paid)}</Td>
-                <Td className={owing > 0 ? 'text-red font-bold' : ''}>
-                  {owing > 0 ? (
-                    <button onClick={() => recordPayment(p)} className="underline">{money(owing)}</button>
-                  ) : '—'}
+                <Td className={owing > 0 ? 'text-red font-semibold' : ''}>
+                  {owing > 0 ? <button onClick={() => recordPayment(p)} className="underline">{money(owing)}</button> : '—'}
                 </Td>
                 <Td><DelButton onClick={() => remove(p)} /></Td>
               </tr>
@@ -141,9 +175,9 @@ export default function PurchasesTab() {
       </table>
 
       <Note>
-        Total purchase cost: <strong>{money(totalCost)}</strong> · Owed to vendors (payable): <strong className={totalOwing > 0 ? 'text-red' : ''}>{money(totalOwing)}</strong>
+        Total spent on stock: <strong>{money(totalSpent)}</strong> · Owed to vendors (payable): <strong className={totalOwing > 0 ? 'text-red' : ''}>{money(totalOwing)}</strong>
       </Note>
-      <Note>Saving a purchase adds the quantity straight to Inventory. New model names are created automatically.</Note>
+      <Note>Transport is spread across the units bought to work out the true landed cost — that's what profit is measured against, not just the buying price.</Note>
     </div>
   );
 }

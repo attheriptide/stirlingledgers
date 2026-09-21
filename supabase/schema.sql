@@ -1,8 +1,7 @@
 -- Stirling Mini Ledger — full schema
--- Run this once in Supabase → SQL Editor → New query → Run.
--- If you already ran the earlier kv_days / kv_inventory setup, only the
--- "purchases", "incomes" and "returns" sections below are new — safe to
--- run the whole file again, it uses "if not exists" throughout.
+-- Run this in Supabase → SQL Editor → New query → Run.
+-- Safe to re-run: uses "if not exists" throughout, so it also works as an
+-- upgrade script if you already have the earlier version of these tables.
 
 create table if not exists kv_days (
   date date primary key,
@@ -13,6 +12,8 @@ create table if not exists kv_inventory (
   model text primary key,
   qty integer not null default 0
 );
+alter table kv_inventory add column if not exists cost_price numeric not null default 0;
+alter table kv_inventory add column if not exists selling_price numeric not null default 0;
 
 create table if not exists purchases (
   id text primary key,
@@ -24,6 +25,9 @@ create table if not exists purchases (
   paid numeric not null default 0,
   notes text
 );
+alter table purchases add column if not exists buying_price numeric not null default 0;
+alter table purchases add column if not exists selling_price numeric not null default 0;
+alter table purchases add column if not exists transport numeric not null default 0;
 
 create table if not exists incomes (
   id text primary key,

@@ -63,17 +63,17 @@ export default function ReturnsTab() {
       {!showForm ? (
         <AddButton onClick={() => setShowForm(true)}>+ Add return</AddButton>
       ) : (
-        <div className="bg-[#f4efe2] border border-[#e0d9c6] rounded-md p-4 mb-4">
+        <div className="bg-highlight border border-highlight-border rounded-md p-4 mb-4">
           <div className="flex gap-2 mb-3">
             <button
               onClick={() => setKind('sale_return')}
-              className={`px-3 py-1.5 rounded-full text-[0.8rem] font-bold border ${kind === 'sale_return' ? 'bg-ink text-white border-ink' : 'bg-white text-muted border-[#c8c2b2]'}`}
+              className={`px-3 py-1.5 rounded-full text-[0.8rem] font-bold border ${kind === 'sale_return' ? 'bg-ink text-white border-ink' : 'bg-white text-muted border-rule'}`}
             >
               Customer return (sale)
             </button>
             <button
               onClick={() => setKind('purchase_return')}
-              className={`px-3 py-1.5 rounded-full text-[0.8rem] font-bold border ${kind === 'purchase_return' ? 'bg-ink text-white border-ink' : 'bg-white text-muted border-[#c8c2b2]'}`}
+              className={`px-3 py-1.5 rounded-full text-[0.8rem] font-bold border ${kind === 'purchase_return' ? 'bg-ink text-white border-ink' : 'bg-white text-muted border-rule'}`}
             >
               Return to vendor (purchase)
             </button>

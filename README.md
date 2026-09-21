@@ -18,7 +18,32 @@ and receivables/payables — backed by Supabase, built with Vite + React + TypeS
   income) and everything you still owe (unpaid expenditure + purchases), with a "record payment"
   action on each line.
 
-## Local setup
+## What's new in this version
+
+Redesigned to feel like Monarch Money — a sidebar, a Dashboard as the landing screen, and one
+clean color system throughout, replacing the earlier cream "paper ledger" look and the crowded
+top tab row.
+
+**Dashboard** (new, and now the first thing you see): cash in hand, net profit, a full profit
+breakdown (revenue → COGS → gross profit → other income/expenses → net profit), top-selling
+models, and a low-stock list — profit monitoring and sales control in one place.
+
+**Purchases**, rebuilt: you now enter **buying price**, **selling price**, and a **transport**
+cost per purchase. Transport is spread across the units bought to get a true landed cost per
+unit, which is what profit is measured against — not just the sticker buying price. Saving a
+purchase updates the model's stock, its running average cost, and its suggested selling price.
+
+**Inventory**, extended: shows cost price, selling price and per-unit margin for every model,
+plus a low-stock warning banner. Selling price now auto-fills when you add a sale in the Ledger
+tab, so pricing stays consistent without having to remember it.
+
+**Unchanged in substance:** Ledger (daily sales/expenditure), Reports, and the Income/
+Returns/Receivables & Payables tabs added earlier — same data, same behavior, restyled to match.
+
+If you already have this project's tables set up, just re-run `supabase/schema.sql` — it adds
+the new `cost_price`/`selling_price`/`transport` columns without touching existing rows.
+
+
 
 ```bash
 npm install

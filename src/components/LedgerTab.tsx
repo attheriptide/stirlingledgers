@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getDay, setDay, listDayDates } from '../lib/db';
+import { getDay, setDay } from '../lib/db';
+import { computeCashBalance } from '../lib/cash';
 import { useInventory } from '../context/InventoryContext';
 import { money, todayStr } from '../lib/format';
 import { toast } from '../lib/toast';
@@ -19,13 +20,9 @@ export default function LedgerTab({ date, onDateChange: onDateChangeExternal }: 
   const [saveStatus, setSaveStatus] = useState('');
 
   const computeBF = async (d: string): Promise<number> => {
-    const dates = (await listDayDates()).filter((x) => x < d).sort();
-    if (dates.length === 0) return 0;
-    const prev = await getDay(dates[dates.length - 1]);
-    if (!prev) return 0;
-    const cashIn = prev.sales.reduce((s, r) => s + (Number(r.paid) || 0), 0);
-    const expTotal = prev.expenditures.filter((r) => r.paid).reduce((s, r) => s + (Number(r.amount) || 0), 0);
-    return (Number(prev.bf) || 0) + cashIn - expTotal;
+    // Everything that happened before this date — sales, expenditure, income,
+    // purchases and returns — rolled into one true opening balance.
+    return computeCashBalance({ before: d });
   };
 
   const load = async (d: string) => {
@@ -55,6 +52,17 @@ export default function LedgerTab({ date, onDateChange: onDateChangeExternal }: 
     sales[i] = { ...sales[i], ...patch };
     setDayState({ ...day, sales });
   };
+  const chooseModel = (i: number, model: string) => {
+    const row = day.sales[i];
+    const item = inventory[model];
+    // Auto-suggest the price from the model's selling price, but only if nothing's been typed yet.
+    if (item && item.sellingPrice > 0 && (!row.price || row.price === 0)) {
+      updateSale(i, { model, price: item.sellingPrice });
+    } else {
+      updateSale(i, { model });
+    }
+  };
+
   const updateExp = (i: number, patch: Partial<ExpRow>) => {
     const expenditures = day.expenditures.slice();
     expenditures[i] = { ...expenditures[i], ...patch };
@@ -125,9 +133,11 @@ export default function LedgerTab({ date, onDateChange: onDateChangeExternal }: 
               <tr key={i}>
                 <Td><input className={inputCls} value={row.customer} onChange={(e) => updateSale(i, { customer: e.target.value })} /></Td>
                 <Td>
-                  <select className={inputCls} value={row.model} onChange={(e) => updateSale(i, { model: e.target.value })}>
+                  <select className={inputCls} value={row.model} onChange={(e) => chooseModel(i, e.target.value)}>
                     <option value="">—</option>
-                    {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+                    {modelOptions.map((m) => (
+                      <option key={m} value={m}>{m}{inventory[m]?.sellingPrice ? ` — ${money(inventory[m].sellingPrice)}` : ''}</option>
+                    ))}
                   </select>
                 </Td>
                 <Td><input className={inputCls} style={{ maxWidth: 70 }} value={row.ref} onChange={(e) => updateSale(i, { ref: e.target.value })} /></Td>
@@ -172,6 +182,7 @@ export default function LedgerTab({ date, onDateChange: onDateChangeExternal }: 
         <span className="text-[0.78rem] text-muted">{saveStatus}</span>
       </div>
       <Note>Stock is reduced automatically when a day is saved (editing and re-saving the same day won't double-count).</Note>
+      <Note>Brought forward now includes everything before this date — Ledger sales/expenditure, Income received, Purchases paid, and Returns — not just prior Ledger days.</Note>
     </div>
   );
 }

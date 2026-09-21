@@ -63,7 +63,7 @@ export default function IncomeTab() {
       {!showForm ? (
         <AddButton onClick={() => setShowForm(true)}>+ Add income</AddButton>
       ) : (
-        <div className="bg-[#f4efe2] border border-[#e0d9c6] rounded-md p-4 mb-4">
+        <div className="bg-highlight border border-highlight-border rounded-md p-4 mb-4">
           <div className="flex gap-3 flex-wrap mb-3">
             <Field label="Date" className="max-w-[160px]">
               <input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} />

@@ -2,11 +2,7 @@ import { supabase } from './supabase';
 import type { DayEntry, Inventory, Purchase, IncomeEntry, ReturnEntry } from './types';
 
 /* =====================================================================
-   LEDGER DAYS + INVENTORY
-   Same two tables and same read/write shape as the original HTML build
-   (kv_days: date + jsonb blob, kv_inventory: model + qty). Behavior here
-   is unchanged — only the transport (Supabase JS client vs raw fetch)
-   is different.
+   LEDGER DAYS  (unchanged)
    ===================================================================== */
 export async function getDay(date: string): Promise<DayEntry | null> {
   const { data, error } = await supabase.from('kv_days').select('data').eq('date', date).maybeSingle();
@@ -34,17 +30,31 @@ export async function listAllDays(): Promise<{ date: string; day: DayEntry }[]> 
     .filter((x): x is { date: string; day: DayEntry } => x.day !== null);
 }
 
+/* =====================================================================
+   INVENTORY  (now price-aware: qty + cost price + selling price)
+   ===================================================================== */
 export async function getInventory(): Promise<Inventory | null> {
-  const { data, error } = await supabase.from('kv_inventory').select('model, qty');
+  const { data, error } = await supabase.from('kv_inventory').select('model, qty, cost_price, selling_price');
   if (error) { console.error('getInventory failed', error); return null; }
   if (!data || data.length === 0) return null;
   const obj: Inventory = {};
-  data.forEach((r) => { obj[r.model as string] = r.qty as number; });
+  data.forEach((r) => {
+    obj[r.model as string] = {
+      qty: (r.qty as number) ?? 0,
+      costPrice: (r.cost_price as number) ?? 0,
+      sellingPrice: (r.selling_price as number) ?? 0,
+    };
+  });
   return obj;
 }
 
 export async function setInventory(inv: Inventory): Promise<boolean> {
-  const rows = Object.entries(inv).map(([model, qty]) => ({ model, qty }));
+  const rows = Object.entries(inv).map(([model, item]) => ({
+    model,
+    qty: item.qty,
+    cost_price: item.costPrice,
+    selling_price: item.sellingPrice,
+  }));
   const { error: delErr } = await supabase.from('kv_inventory').delete().neq('model', '__none__');
   if (delErr) { console.error('setInventory delete failed', delErr); return false; }
   if (rows.length) {
@@ -55,16 +65,31 @@ export async function setInventory(inv: Inventory): Promise<boolean> {
 }
 
 /* =====================================================================
-   PURCHASES  (new)
+   PURCHASES  (buying price, selling price, transport all captured)
    ===================================================================== */
+function purchaseToRow(p: Purchase) {
+  return {
+    id: p.id, date: p.date, vendor: p.vendor, model: p.model, qty: p.qty,
+    buying_price: p.buyingPrice, selling_price: p.sellingPrice, transport: p.transport,
+    cost: p.cost, paid: p.paid, notes: p.notes,
+  };
+}
+function rowToPurchase(r: any): Purchase {
+  return {
+    id: r.id, date: r.date, vendor: r.vendor, model: r.model, qty: r.qty,
+    buyingPrice: r.buying_price ?? 0, sellingPrice: r.selling_price ?? 0, transport: r.transport ?? 0,
+    cost: r.cost, paid: r.paid, notes: r.notes ?? '',
+  };
+}
+
 export async function listPurchases(): Promise<Purchase[]> {
   const { data, error } = await supabase.from('purchases').select('*').order('date', { ascending: false });
   if (error) { console.error('listPurchases failed', error); return []; }
-  return (data ?? []) as Purchase[];
+  return (data ?? []).map(rowToPurchase);
 }
 
 export async function addPurchase(p: Purchase): Promise<boolean> {
-  const { error } = await supabase.from('purchases').insert(p);
+  const { error } = await supabase.from('purchases').insert(purchaseToRow(p));
   if (error) { console.error('addPurchase failed', error); return false; }
   return true;
 }
@@ -82,7 +107,7 @@ export async function updatePurchasePaid(id: string, paid: number): Promise<bool
 }
 
 /* =====================================================================
-   INCOME  (new)
+   INCOME  (unchanged)
    ===================================================================== */
 export async function listIncomes(): Promise<IncomeEntry[]> {
   const { data, error } = await supabase.from('incomes').select('*').order('date', { ascending: false });
@@ -109,7 +134,7 @@ export async function updateIncomeReceived(id: string, received: number): Promis
 }
 
 /* =====================================================================
-   RETURNS  (new)
+   RETURNS  (unchanged)
    ===================================================================== */
 export async function listReturns(): Promise<ReturnEntry[]> {
   const { data, error } = await supabase.from('returns').select('*').order('date', { ascending: false });

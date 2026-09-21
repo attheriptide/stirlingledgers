@@ -1,4 +1,4 @@
-// ---- Ledger (unchanged from the original build) ----
+// ---- Ledger (unchanged) ----
 export type SaleRow = {
   customer: string;
   model: string;
@@ -20,31 +20,40 @@ export type DayEntry = {
   committed: Record<string, number> | null;
 };
 
-export type Inventory = Record<string, number>;
+// ---- Inventory: now price-aware, so profit can actually be calculated ----
+export type InventoryItem = {
+  qty: number;
+  costPrice: number;     // current average buying price per unit
+  sellingPrice: number;  // suggested selling price per unit — auto-fills new sales
+};
+export type Inventory = Record<string, InventoryItem>;
 
-// ---- New: purchases (stock bought in, cash or on credit to a vendor) ----
+// ---- Purchases: buying price, selling price and transport all captured ----
 export type Purchase = {
   id: string;
   date: string;
   vendor: string;
   model: string;
   qty: number;
-  cost: number;
-  paid: number; // amount paid to the vendor now; cost - paid = payable owed to them
+  buyingPrice: number;   // cost per unit, excluding transport
+  sellingPrice: number;  // intended selling price per unit (updates the model's suggested price)
+  transport: number;     // total transport/freight for this purchase (not per unit)
+  cost: number;          // total landed cost = qty * buyingPrice + transport
+  paid: number;          // amount paid to the vendor now; cost - paid = payable owed to them
   notes: string;
 };
 
-// ---- New: other income (not a stock sale) ----
+// ---- Income (unchanged) ----
 export type IncomeEntry = {
   id: string;
   date: string;
   source: string;
   amount: number;
-  received: number; // amount received now; amount - received = receivable owed to you
+  received: number;
   notes: string;
 };
 
-// ---- New: returns, either side ----
+// ---- Returns (unchanged) ----
 export type ReturnKind = 'sale_return' | 'purchase_return';
 export type ReturnEntry = {
   id: string;
@@ -57,7 +66,7 @@ export type ReturnEntry = {
   notes: string;
 };
 
-// ---- Computed views, not stored directly ----
+// ---- Computed views ----
 export type Receivable = {
   source: 'sale' | 'income';
   date: string;
@@ -66,8 +75,8 @@ export type Receivable = {
   total: number;
   received: number;
   outstanding: number;
-  refId?: string; // for incomes, so a payment can be recorded against it
-  saleIndex?: number; // for sales, the row's index within that day's entry
+  refId?: string;
+  saleIndex?: number;
 };
 
 export type Payable = {
@@ -78,6 +87,18 @@ export type Payable = {
   total: number;
   paid: number;
   outstanding: number;
-  refId?: string; // for purchases
-  expIndex?: number; // for expenditures, the row's index within that day's entry
+  refId?: string;
+};
+
+// ---- Profit summary, computed across everything ----
+export type ProfitSummary = {
+  revenue: number;
+  salesReturns: number;
+  netRevenue: number;
+  cogs: number;
+  grossProfit: number;
+  otherIncome: number;
+  expenses: number;
+  netProfit: number;
+  cashInHand: number;
 };

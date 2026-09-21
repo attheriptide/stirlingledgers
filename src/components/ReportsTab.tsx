@@ -85,7 +85,7 @@ export default function ReportsTab({ onOpenDate }: { onOpenDate: (date: string) 
         <tbody>
           {rows.length === 0 && <EmptyRow colSpan={4}>No saved days in this range.</EmptyRow>}
           {rows.map((r) => (
-            <tr key={r.date} className="cursor-pointer hover:bg-[#f4efe2]" onClick={() => onOpenDate(r.date)}>
+            <tr key={r.date} className="cursor-pointer hover:bg-highlight" onClick={() => onOpenDate(r.date)}>
               <Td>{r.date}</Td><Td>{money(r.cashIn)}</Td><Td>{money(r.expTotal)}</Td><Td>{money(r.balance)}</Td>
             </tr>
           ))}
